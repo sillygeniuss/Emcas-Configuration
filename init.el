@@ -1,23 +1,45 @@
 ;;; package --- Summary
 (setq inhibit-startup-message t)
 ;;; Code:
-(scroll-bar-mode -1)    ; Disable visible scrollbar
-(tool-bar-mode -1)      ; Disable the toolbar
-(tooltip-mode -1)       ; Disable tooltips
-(set-fringe-mode 10)    ; Give some breathing room
+(scroll-bar-mode -1)     ; Disable visible scrollbar
+(tool-bar-mode -1)       ; Disable the toolbar
+(tooltip-mode -1)        ; Disable tooltips
+(set-fringe-mode 10)     ; Give some breathing room
+(menu-bar-mode -1)       ; Disable the menu bar
+(show-paren-mode 1)      ; 成对符号匹配模式
+(global-hl-line-mode 1)  ; 高亮光标当前行
+(read-only-mode -1)      ; 关闭Buffer只读模式
+(column-number-mode)
+(global-display-line-numbers-mode t)
 
-(menu-bar-mode -1)      ; Disable the menu bar
+; 自定义配置
+(custom-set-variables
+ '(spacemacs-theme-custom-colors '((bg1 . "#212026") (bg2 . "#292B2E")))
+ '(spacemacs-theme-keyword-italic t))
+
+;; Set up the HTTP proxy
+(setq url-gateway-method 'socks)
+(setq socks-server '("SS Server" "127.0.0.1" 1086 5))
 
 ;; Set up the visible bell
 (setq visible-bell t)
 
-(set-face-attribute 'default nil :font "Iosevka" :height 200 :weight 'Thin)
+;; Disable files backup function
+(setq make-backup-files nil)
+(setq create-lockfiles nil)
+
+(set-face-attribute 'default nil :font "Cascadia Code" :height 160 :weight 'Thin)
 
 ;; 启动全屏 
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
 
+;; Split the window vertically
+(setq split-height-threshold nil)
+(setq split-width-threshold 0)
+
 ;; Auto complete the brackets
-(setq electric-pair-preserve-balance nil)
+(setq electric-pair-inhibit-predicate 'electric-pair-conservative-inhibit)
+(electric-pair-mode 1)
 
 ;; Make ESC quit prompts
 (global-set-key (kbd "<esacpe>") 'keyboard-escape-quit)
@@ -32,8 +54,9 @@
 ;; Initialize package sources
 (require 'package)
 
-(setq package-archives '(("melpa" . "http://mirrors.tuna.tsinghua.edu.cn/elpa/melpa/")
-			 ("org" . "http://mirrors.tuna.tsinghua.edu.cn/elpa/org/")
+;; Package sources configuration
+(setq package-archives '(("melpa" . "https://melpa.org/packages/")
+			 ("org" . "https://orgmode.org/elpa/")
 			 ("elpa" . "https://elpa.gnu.org/packages/")))
 
 (package-initialize)
@@ -47,8 +70,28 @@
 (require 'use-package)
 (setq use-package-always-ensure t)
 
-(column-number-mode)
-(global-display-line-numbers-mode t)
+;; Packages configuration
+(use-package diminish)
+
+(use-package general
+  :config
+  (general-evil-setup t)
+
+  (general-create-definer dw/leader-key-def
+    :keymaps '(normal emacs)
+    :prefix "SPC"
+    :global-prefix "C-c SPC")
+
+  (general-create-definer dw/ctrl-c-keys
+    :prefix "C-c"))
+
+(use-package avy
+  :commands (avy-goto-char avy-goto-word-0 ayv-goto-line))
+(dw/leader-key-def
+  "j" '(:ignore t :which-key "jump")
+  "jj" '(avy-goto-char :which-key "jump to char")
+  "jw" '(avy-goto-word-0 :which-key "jump to word")
+  "jl" '(avy-goto-line :which-key "jump to line"))
 
 ;; Disable line numbers for some modes
 (dolist (mode '(org-mode-hook
@@ -75,14 +118,26 @@
   (("s-{" . #'centaur-tabs-backward)
    ("s-}" . #'centaur-tabs-forward)))
 
+(use-package vscode-icon
+  :ensure t
+  :commands (vscode-icon-for-file))
+
 (use-package dired-sidebar
   :bind (("s-b" . dired-sidebar-toggle-sidebar))
-  :commands (dired-sidebar-toggle-sidebar))
+  :commands (dired-sidebar-toggle-sidebar)
+  :config
+  (push 'toggle-window-split dired-sidebar-toggle-hidden-commands)
+  (push 'rotate-windows dired-sidebar-toggle-hidden-commands)
+
+  (setq dired-sidebar-subtree-line-prefix "__")
+  (setq dired-sidebar-theme 'vscode)
+  (setq dired-sidebar-use-term-integration t)
+  (setq dired-sidebar-use-custom-font t))
 
 (use-package command-log-mode)
 
 (use-package ivy
-  :diminish
+  :diminish ivy-mode
   :bind (("C-s" . swiper)
 	 :map ivy-minibuffer-map
 	 ("TAB" . ivy-alt-done)	 
@@ -96,25 +151,70 @@
 	 :map ivy-reverse-i-search-map
 	 ("C-k" . ivy-previous-line)
 	 ("C-d" . ivy-reverse-i-search-kill))
+  :custom
+  (ivy-count-format "(%d/%d) ")
+  (ivy-use-virtual-buffers t)
+  (ivy-use-selectable-prompt t)
   :config
-  (ivy-mode 1))
+  (ivy-mode)
+  (setq enable-recursive-minibuffers t))
+
+(use-package ivy-rich
+  :after ivy
+  :demand
+  :custom
+  (ivy-virtual-abbreviate 'full
+			  ivy-rich-switch-buffer-align-virtual-buffer t
+			  ivy-rich-path-style 'abbrev)
+  :config
+  (setq ivy-rich-parse-remote-buffer nil)
+  (setq ivy-rich-parse-remote-file-path nil)
+  ;(ivy-set-display-transformer 'ivy-switch-buffer
+  ;                             'ivy-rich-switch-buffer-transformer)
+  (ivy-rich-mode 1))
+
+(use-package ivy-xref
+  :init
+  (when (>= emacs-major-version 27)
+    (setq xref-show-definitions-function #'ivy-xref-show-defs))
+  (setq xref-show-xrefs-function #'ivy-xref-show-xrefs))
 
 (use-package counsel
+  :after ivy
+  :demand
+  :diminish counsel-mode
+  :init
+  (setq ivy-use-virtual-buffers t
+	ivy-re-builders-alist
+	'((counsel-rg . ivy--regex-plus)
+	  (swiper . ivy--regex-plus)
+	  (t . ivy--regex-plus)))
   :bind (("M-x" . counsel-M-x)
 	 ("C-x b" . counsel-ibuffer)
 	 ("C-x C-f" . counsel-find-file)
 	 :map minibuffer-local-map
 	 ("C-r" . 'counsel-minibuffer-history))
   :config
-  (setq ivy-initial-inputs-alist nil)) ;; Don't stat search with ^
+  (add-to-list 'ivy-ignore-buffers "\\`\\*remind-bindings\\*")
+  (counsel-mode 1)
+  ;;<<do.minimal/counsel-ripgrep>>
+  (setq ivy-initial-inputs-alist
+	'((counsel-minor . "^+")
+	  (counsel-package . "^+")
+	  (counsel-org-capture . "")
+	  (counsel-M-x . "")
+	  (counsel-describe-function . "")
+	  (counsel-describe-variable . "")
+	  (org-refile . "^")
+	  (org-agenda-refile . "^")
+	  (org-capture-refile . "^")
+	  (Man-completion-table . "^")
+	  (woman . "^"))))
 
 (global-set-key (kbd "C-M-b") 'counsel-switch-buffer)
+(global-set-key (kbd "C-c f") 'counsel-rg)
 
 (define-key emacs-lisp-mode-map (kbd "C-x M-t") 'counsel-load-theme)
-
-(use-package vscode-icon
-  :ensure t
-  :commands (vscode-icon-for-file))
 
 (use-package doom-modeline
   :ensure t
@@ -122,7 +222,7 @@
   :custom ((doom-modeline-height 8)))
 
 (use-package doom-themes
-	     :init (load-theme 'doom-laserwave t))
+	     :init (load-theme 'spacemacs-dark t))
 
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
@@ -132,10 +232,6 @@
   :diminish which-key-mode
   :config
   (setq which-key-idle-delay 0.3))
-
-(use-package ivy-rich
-  :init
-  (ivy-rich-mode 1))
 
 (use-package helpful
   :custom
@@ -147,16 +243,43 @@
   ([remap describe-variable] . counsel-describe-variable)
   ([remap describe-key] . helpful-key))
 
-;(use-package general
-;  :config
-;  (general-create-definer rune/leader-keys
-;    :keymaps '(normal insert visual emacs)
-;    :prefix "SPC"
-;    :global-prefix "C-SPC")
-;
-;  (rune/leader-keys
-;    "t"  '(:ignore t :which-key "toggle")
-;    "tt" '(counsel-load-theme :which-key "choose theme")))
+(use-package magit
+  :config
+  (global-set-key (kbd "C-c g") 'magit-status)
+  :custom
+  (magit-git-executable "/usr/local/bin/git")
+  :init
+  (use-package with-editor :ensure t)
+  (defadvice magit-status (around magit-fullscreen activate)
+    (window-configuration-to-register :magit-fullscreen)
+    ad-do-it
+    (delete-other-window))
+  (defadvice magit-quit-window (after magit-restore-screen activate)
+    (jump-to-register :magit-fullscreen))
+  :config
+  (remove-hook 'magit-status-sections-hook 'magit-insert-tags-header)
+  (remove-hook 'magit-status-sections-hook 'magit-insert-status-headers)
+  (remove-hook 'magit-status-sections-hook 'magit-insert-unpushed-to-pushremote)
+  (remove-hook 'magit-status-sections-hook 'magit-insert-unpulled-from-pushremote)
+  (remove-hook 'magit-status-sections-hook 'magit-insert-unpulled-from-upstream)
+  (remove-hook 'magit-status-sections-hook 'magit-insert-unpushed-to-upstream-or-recent))
+
+(dw/leader-key-def
+  "gs" 'magit-status
+  "gd" 'magit-diff-unstaged
+  "gc" 'magit-branch-or-checkout
+  "gb" 'magit-branch
+  "gP" 'magit-push-current
+  "gp" 'magit-pull-branch
+  "gr" 'magit-rebase
+  "gm" 'magit-merge
+  "gB" 'magit-blame)
+
+(use-package nyan-mode
+  :config
+  (nyan-mode 1))
+
+(use-package undo-fu)
 
 (use-package evil
   :init
@@ -168,7 +291,8 @@
   (evil-mode 1)
   (define-key evil-insert-state-map (kbd "C-g") 'evil-normal-state)
   (define-key evil-insert-state-map (kbd "C-h") 'evil-delete-backward-char-and-join)
-  (define-key evil-normal-state-map (kbd "C-r") 'evil-scroll-line-up)
+  (define-key evil-normal-state-map (kbd "u") 'undo-fu-only-undo)
+  (define-key evil-normal-state-map (kbd "\C-r") 'undo-fu-only-redo)
 
   ;; Use visual line motions even outside of visual-line-mode buffers
   (evil-global-set-key 'motion "j" 'evil-next-visual-line)
@@ -192,25 +316,29 @@
   ("k" text-scale-decrease "out")
   ("f" nil "finished" :exit t))
 
-;;(rune/leader-keys
-;;  "ts" '(hydra-text-scale/body :which-key "scale text"))
-
 (use-package projectile
   :diminish projectile-mode
   :config
   (projectile-mode 1)
   (setq projectile-sort-order 'recently-active)
   (setq projectile-enable-caching t)
-  :custom ((projectile-completion-system 'ivy))
+  :demand t
   :bind-keymap
   ("C-c p" . projectile-command-map)
+  :custom
+  ((projectile-completion-system 'ivy))
   :init
   (when (file-directory-p "~/Project/Code")
     (setq projectile-project-search-path '("~/Projects/Code")))
   (setq projectile-switch-project-action #'projectile-dired))
 
 (use-package counsel-projectile
-	:after (ivy counsel))
+	:after (projectile))
+
+(dw/leader-key-def
+  "pr" 'counsel-projectile-rg
+  "pf" 'counsel-projectile-find-file
+  "ps" 'counsel-projectile-switch-project)
 
 ;; Language Servers
 (defun efs/lsp-mode-setup ()
@@ -231,6 +359,10 @@
 
 (use-package lsp-treemacs
   :after lsp)
+
+(use-package flycheck
+  :config
+  (global-flycheck-mode 1))
 
 ;; Language php
 (use-package php-mode
@@ -270,13 +402,6 @@
   (setq vterm-shell "/bin/zsh")
   (setq vterm-max-scrollback 10000))
 
-;; (defun dw/org-mode-setup ()
-;;   (org-indent-mode)
-;;   (variable-pitch-mode 1)
-;;   (auto-file-mode 0)
-;;   (visual-line-mode 0)
-;;   (setq evil-auto-indent nil))
-
 (use-package org
   ;; :hook (org-mode . dw/org-mode-setup)
   :config
@@ -292,6 +417,24 @@
 			'(("^ *\\([-]\\)"
 			   (0 (prog1 () (compose-region (match-beginning 1) (match-end 1) "●"))))))
 
+(use-package ivy-posframe
+  :after ivy
+  :diminish ivy-posframe-mode
+  :custom-face
+  (ivy-posframe-border ((t (:background "#FFFAFA"))))
+  :custom
+  (ivy-posframe-width 115)
+  (ivy-posframe-min-width 115)
+  (ivy-posframe-height 10)
+  (ivy-posframe-min-height 10)
+  :config
+  (setq ivy-posframe-display-functions-alist '((t . ivy-posframe-display-at-frame-center)))
+  (setq ivy-posframe-border-width 1)
+  (setq ivy-posframe-parameters '((left-fringe . 8)
+				  (right-fringe . 8)))
+  (setq ivy-posframe-hide-minibuffer t)
+  (ivy-posframe-mode 1))
+
 (dolist (face '((org-level-1 . 1.2)
 		(org-level-2 . 1.1)
 		(org-level-3 . 1.05)
@@ -301,37 +444,3 @@
 		(org-level-7 . 1.1)
 		(org-level-8 . 1.1)))
   (set-face-attribute (car face) nil :font "Cantarell" :weight 'regular :height (cdr face)))
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(centaur-tabs-buffer-groups-function #'centaur-tabs-projectile-buffer-groups t nil "Customized with use-package centaur-tabs")
- '(centaur-tabs-gray-out-icons 'buffer nil nil "Customized with use-package centaur-tabs")
- '(centaur-tabs-height 34 nil nil "Customized with use-package centaur-tabs")
- '(centaur-tabs-modified-marker "●" nil nil "Customized with use-package centaur-tabs")
- '(centaur-tabs-set-icons t nil nil "Customized with use-package centaur-tabs")
- '(centaur-tabs-set-modified-marker t nil nil "Customized with use-package centaur-tabs")
- '(centaur-tabs-style "rounded" nil nil "Customized with use-package centaur-tabs")
- '(company-idle-delay 0.0 nil nil "Customized with use-package company")
- '(company-minimum-prefix-length 1 nil nil "Customized with use-package company")
- '(company-quickhelp-color-background "#b0b0b0")
- '(company-quickhelp-color-foreground "#232333")
- '(counsel-describe-function-function #'helpful-callable nil nil "Customized with use-package helpful")
- '(counsel-describe-variable-function #'helpful-variable nil nil "Customized with use-package helpful")
- '(custom-safe-themes
-   '("74ba9ed7161a26bfe04580279b8cad163c00b802f54c574bfa5d924b99daa4b9" "76bfa9318742342233d8b0b42e824130b3a50dcc732866ff8e47366aed69de11" default))
- '(doom-modeline-height 10 nil nil "Customized with use-package doom-modeline")
- '(lsp-ui-doc-position 'right nil nil "Customized with use-package company-box")
- '(nrepl-message-colors
-   '("#336c6c" "#205070" "#0f2050" "#806080" "#401440" "#6c1f1c" "#6b400c" "#23733c"))
- '(org-bullets-bullet-list '("◉" "○" "●" "○" "●" "○" "●") nil nil "Customized with use-package org-bullets")
- '(package-selected-packages
-   '(dired-sidebar anti-zenburn-theme centaur-tabs php-mode which-key vterm vscode-icon use-package spacemacs-theme rainbow-delimiters org-bullets lsp-ui lsp-treemacs lsp-ivy ivy-rich helpful go-mode general evil-nerd-commenter evil-magit evil-collection eterm-256color dw doom-themes doom-modeline counsel-projectile company-box command-log-mode))
- '(projectile-completion-system 'ivy nil nil "Customized with use-package projectile"))
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
